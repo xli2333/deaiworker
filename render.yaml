@@ -2,7 +2,6 @@ services:
   - type: web
     name: de-ai-worker-api
     runtime: docker
-    rootDir: de_ai_worker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeploy: true
