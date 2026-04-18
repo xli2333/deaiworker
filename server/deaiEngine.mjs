@@ -1574,6 +1574,8 @@ const buildFinalMarkupPlan = async ({ ai, model, fileName, draft, auditReport, s
     '5. 每个 transform 的 markdown 字段必须是该 block 应替换成的完整 Markdown 版本，而不是 diff。',
     '6. markdown 去掉 Markdown 语法和标点后，正文内容序列必须与原 block 完全一致。',
     '7. 如果原 block 不适合加工，就不要硬加符号。',
+    '8. 如果某个 block 明显是表格信息被复制粘贴后丢了格式，例如短字段、年份、数值按单元格顺序竖排，优先还原成 Markdown 表格。',
+    '9. 还原表格时只能使用原 block 中已有内容按顺序排成单元格，不要新增表头文案、说明文字或任何新信息。',
     `文档名：${fileName}`,
     '最终审计摘要：',
     cleanText(auditReport?.summary) || '无',
@@ -1591,7 +1593,7 @@ const buildFinalMarkupPlan = async ({ ai, model, fileName, draft, auditReport, s
       prompt,
       shouldStop,
       systemInstruction:
-        '你是 Markdown 标记规划器。只规划符号，不改正文；允许使用全部 Markdown 语法，但不能新增正文信息。',
+        '你是 Markdown 标记规划器。只规划符号，不改正文；要主动识别并恢复丢格式的表格，但不能新增正文信息。',
       schema: FINAL_MARKUP_PLAN_SCHEMA,
     });
     const parsed = tryParseJsonResponse(raw);
