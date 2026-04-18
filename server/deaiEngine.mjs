@@ -1544,11 +1544,11 @@ const finalizeApprovedDraft = async ({ draft, buildMarkupPlan, onStatus, throwIf
   const finalPolishedText = draft;
 
   throwIfStopped();
-  onStatus?.('final.markup_plan', '姝ｅ湪鐢熸垚鏈€缁?Markdown 鏍囪璁″垝...');
+  onStatus?.('final.markup_plan', '正在生成最终 Markdown 标记计划...');
   const finalMarkupPlanJson = normalizeFinalMarkupPlan(await buildMarkupPlan(finalPolishedText));
 
   throwIfStopped();
-  onStatus?.('final.markup_apply', '姝ｅ湪鍥炲～鏈€缁?Markdown 鏍囪...');
+  onStatus?.('final.markup_apply', '正在回填最终 Markdown 标记...');
   const applyResult = applyFinalMarkupPlan(finalPolishedText, finalMarkupPlanJson);
 
   return {
