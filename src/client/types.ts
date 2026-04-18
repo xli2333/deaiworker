@@ -75,6 +75,7 @@ export interface DeAiJobResult {
     humanizerRoundsUsed?: number;
     auditRoundsUsed?: number;
     finalSkipped?: boolean;
+    finalPolishBypassed?: boolean;
     finalMarkupTransformsPlanned?: number;
     finalMarkupTransformsApplied?: number;
     finalMarkupTransformsRejected?: number;

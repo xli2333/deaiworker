@@ -1530,6 +1530,38 @@ const runFinalPolish = async ({ ai, model, fileName, draft, auditReport, assets,
 
 const buildFinalMarkupPlanFallback = (text) => normalizeFinalMarkupPlan(buildLocalFinalMarkupPlan(text));
 
+const createEmptyFinalMarkupPlan = () => ({
+  summary: '',
+  transforms: [],
+});
+
+const createEmptyFinalMarkupApplyMeta = () => ({
+  appliedTransforms: [],
+  rejectedTransforms: [],
+});
+
+const finalizeApprovedDraft = async ({ draft, buildMarkupPlan, onStatus, throwIfStopped }) => {
+  const finalPolishedText = draft;
+
+  throwIfStopped();
+  onStatus?.('final.markup_plan', '姝ｅ湪鐢熸垚鏈€缁?Markdown 鏍囪璁″垝...');
+  const finalMarkupPlanJson = normalizeFinalMarkupPlan(await buildMarkupPlan(finalPolishedText));
+
+  throwIfStopped();
+  onStatus?.('final.markup_apply', '姝ｅ湪鍥炲～鏈€缁?Markdown 鏍囪...');
+  const applyResult = applyFinalMarkupPlan(finalPolishedText, finalMarkupPlanJson);
+
+  return {
+    finalPolishedText,
+    finalMarkupPlanJson,
+    finalMarkupApplyMeta: {
+      appliedTransforms: applyResult.appliedTransforms,
+      rejectedTransforms: applyResult.rejectedTransforms,
+    },
+    finalText: applyResult.finalText,
+  };
+};
+
 const buildFinalMarkupPlan = async ({ ai, model, fileName, draft, auditReport, shouldStop }) => {
   const prompt = [
     '你现在不是正文编辑，而是终稿 Markdown 标记规划器。',
@@ -1684,33 +1716,22 @@ export const runDeAiPipeline = async ({
       buildRoundStageLabel('最终审计全量复检', auditLoop.roundsUsed)
     );
 
+    const auditApproved = isAuditApproved(auditFinalReportJson);
     let finalPolishedText = auditedText;
-    let finalMarkupPlanJson = {
-      summary: '',
-      transforms: [],
-    };
-    let finalMarkupApplyMeta = {
-      appliedTransforms: [],
-      rejectedTransforms: [],
-    };
+    let finalMarkupPlanJson = createEmptyFinalMarkupPlan();
+    let finalMarkupApplyMeta = createEmptyFinalMarkupApplyMeta();
     let finalText = auditedText;
-    if (isAuditApproved(auditFinalReportJson)) {
-      throwIfStopped();
-      onStatus?.('final.polish', '正在执行终修...');
-      finalPolishedText = applyFinalPolishLocally(auditedText);
-
-      throwIfStopped();
-      onStatus?.('final.markup_plan', '正在生成最终 Markdown 标记计划...');
-      finalMarkupPlanJson = buildFinalMarkupPlanFallback(finalPolishedText);
-
-      throwIfStopped();
-      onStatus?.('final.markup_apply', '正在回填最终 Markdown 标记...');
-      const applyResult = applyFinalMarkupPlan(finalPolishedText, finalMarkupPlanJson);
-      finalText = applyResult.finalText;
-      finalMarkupApplyMeta = {
-        appliedTransforms: applyResult.appliedTransforms,
-        rejectedTransforms: applyResult.rejectedTransforms,
-      };
+    if (auditApproved) {
+      const approvedFinalization = await finalizeApprovedDraft({
+        draft: auditedText,
+        buildMarkupPlan: async (draft) => buildFinalMarkupPlanFallback(draft),
+        onStatus,
+        throwIfStopped,
+      });
+      finalPolishedText = approvedFinalization.finalPolishedText;
+      finalMarkupPlanJson = approvedFinalization.finalMarkupPlanJson;
+      finalMarkupApplyMeta = approvedFinalization.finalMarkupApplyMeta;
+      finalText = approvedFinalization.finalText;
     } else {
       onStatus?.('final.skipped', '最终审计未通过，已跳过终修。');
     }
@@ -1735,7 +1756,8 @@ export const runDeAiPipeline = async ({
       workflowMeta: {
         humanizerRoundsUsed: humanizerLoop.roundsUsed,
         auditRoundsUsed: auditLoop.roundsUsed,
-        finalSkipped: !isAuditApproved(auditFinalReportJson),
+        finalSkipped: !auditApproved,
+        finalPolishBypassed: auditApproved,
         finalMarkupTransformsPlanned: finalMarkupPlanJson.transforms?.length || 0,
         finalMarkupTransformsApplied: finalMarkupApplyMeta.appliedTransforms.length,
         finalMarkupTransformsRejected: finalMarkupApplyMeta.rejectedTransforms.length,
@@ -1836,48 +1858,30 @@ export const runDeAiPipeline = async ({
     buildRoundStageLabel('最终审计全量复检', auditLoop.roundsUsed)
   );
 
+  const auditApproved = isAuditApproved(auditFinalReportJson);
   let finalPolishedText = auditedText;
-  let finalMarkupPlanJson = {
-    summary: '',
-    transforms: [],
-  };
-  let finalMarkupApplyMeta = {
-    appliedTransforms: [],
-    rejectedTransforms: [],
-  };
+  let finalMarkupPlanJson = createEmptyFinalMarkupPlan();
+  let finalMarkupApplyMeta = createEmptyFinalMarkupApplyMeta();
   let finalText = auditedText;
-  if (isAuditApproved(auditFinalReportJson)) {
-    throwIfStopped();
-    onStatus?.('final.polish', '正在执行终修...');
-    finalPolishedText = await runFinalPolish({
-      ai,
-      model,
-      fileName,
+  if (auditApproved) {
+    const approvedFinalization = await finalizeApprovedDraft({
       draft: auditedText,
-      auditReport: auditFinalReportJson,
-      assets,
-      shouldStop,
+      buildMarkupPlan: async (draft) =>
+        await buildFinalMarkupPlan({
+          ai,
+          model,
+          fileName,
+          draft,
+          auditReport: auditFinalReportJson,
+          shouldStop,
+        }),
+      onStatus,
+      throwIfStopped,
     });
-
-    throwIfStopped();
-    onStatus?.('final.markup_plan', '正在生成最终 Markdown 标记计划...');
-    finalMarkupPlanJson = await buildFinalMarkupPlan({
-      ai,
-      model,
-      fileName,
-      draft: finalPolishedText,
-      auditReport: auditFinalReportJson,
-      shouldStop,
-    });
-
-    throwIfStopped();
-    onStatus?.('final.markup_apply', '正在回填最终 Markdown 标记...');
-    const applyResult = applyFinalMarkupPlan(finalPolishedText, finalMarkupPlanJson);
-    finalText = applyResult.finalText;
-    finalMarkupApplyMeta = {
-      appliedTransforms: applyResult.appliedTransforms,
-      rejectedTransforms: applyResult.rejectedTransforms,
-    };
+    finalPolishedText = approvedFinalization.finalPolishedText;
+    finalMarkupPlanJson = approvedFinalization.finalMarkupPlanJson;
+    finalMarkupApplyMeta = approvedFinalization.finalMarkupApplyMeta;
+    finalText = approvedFinalization.finalText;
   } else {
     onStatus?.('final.skipped', '最终审计未通过，已跳过终修。');
   }
@@ -1902,7 +1906,8 @@ export const runDeAiPipeline = async ({
     workflowMeta: {
       humanizerRoundsUsed: humanizerLoop.roundsUsed,
       auditRoundsUsed: auditLoop.roundsUsed,
-      finalSkipped: !isAuditApproved(auditFinalReportJson),
+      finalSkipped: !auditApproved,
+      finalPolishBypassed: auditApproved,
       finalMarkupTransformsPlanned: finalMarkupPlanJson.transforms?.length || 0,
       finalMarkupTransformsApplied: finalMarkupApplyMeta.appliedTransforms.length,
       finalMarkupTransformsRejected: finalMarkupApplyMeta.rejectedTransforms.length,

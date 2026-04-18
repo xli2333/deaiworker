@@ -89,6 +89,20 @@ const run = async () => {
     console.log(`[smoke] polling: ${job.status} ${job.currentNode || ''} ${job.message || ''}`);
     if (job.status === 'succeeded') {
       assert(job.result?.finalText, '任务成功但缺少 finalText');
+      assert(job.result?.workflowMeta?.finalPolishBypassed === true, 'finalPolishBypassed should be true after a passing audit');
+      assert(job.result?.finalPolishedText === job.result?.auditedText, 'finalPolishedText should reuse auditedText when polish is bypassed');
+      assert(
+        !(job.history || []).some((entry) => entry.node === 'final.polish'),
+        'a passing audit should not enter final.polish'
+      );
+      assert(
+        (job.history || []).some((entry) => entry.node === 'final.markup_plan'),
+        'a passing audit should still enter final.markup_plan'
+      );
+      assert(
+        (job.history || []).some((entry) => entry.node === 'final.markup_apply'),
+        'a passing audit should still enter final.markup_apply'
+      );
       console.log('[smoke] end-to-end ok');
       return;
     }
