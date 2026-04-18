@@ -3,14 +3,19 @@ FROM node:20-bookworm-slim
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends python3 python3-pip python3-venv fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
+
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY package*.json ./
 COPY requirements.txt ./
 
+RUN python3 -m venv "$VIRTUAL_ENV"
 RUN npm ci
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
